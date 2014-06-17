@@ -1,7 +1,13 @@
 <?php 
 
-// XML-RPC Config 
-$access_key	= 'free'; //"free" or Your key 
+namespace UAS;
+
+// Loads the class
+require 'vendor/UASparser_0.93/UASparser.php';
+
+// Creates a new UASparser object and set cache dir (this php script must right write to cache dir)
+$parser = new Parser();
+$parser->SetCacheDir( './cache' );
 
 // Directory Config
 $in		= './in';
@@ -48,16 +54,7 @@ if ( $dh = opendir( $in ) )
 
 function getUADetails( $data, $headers )
 {
-    global $path, $host, $port;
-
-	# include client lib from http://phpxmlrpc.sourceforge.net/ 
-    require_once 'XML/RPC2/Client.php';
-	require_once 'XML/RPC2/Value.php';
-	
-	$client = XML_RPC2_Client::create(
-		'http://user-agent-string.info/rpc/rpcxml.php',
-		array( 'prefix'	=> 'ua.' )
-	);
+    global $parser;
 
 	# what do we want back?
 	$fields = array(
@@ -65,6 +62,7 @@ function getUADetails( $data, $headers )
 		# UA Info
 		'ua_family'			=> 'UA Family',
 		'ua_name'			=> 'UA Name',
+		'ua_version'		=> 'UA Version',
 		'ua_url'			=> 'UA URL',
 		'ua_company'		=> 'UA Company',
 		'ua_company_url'	=> 'UA Company URL',
@@ -76,6 +74,10 @@ function getUADetails( $data, $headers )
 		'os_company'		=> 'OS Company',
 		'os_company_url'	=> 'OS URL',
 		'os_icon'			=> 'OS Icon',
+		# Device Info
+		'device_type'		=> 'Device Type',
+		'device_icon'		=> 'Device Icon',
+		'device_info_url'	=> 'Device Info URL'
 	);
 
 	# create the hash
@@ -84,49 +86,31 @@ function getUADetails( $data, $headers )
 	foreach ( $data as $row )
 	{
 		# UA must be the first column
-		$ua = base64_encode( $row[0] );
+		$UA = $row;
 		
-		# build the query
-		try {
-			
-			$result = $client->search( $ua, $access_key ); 
+		# get the details
+		$result = $parser->parse( $row[0] );
+		
+		# Success!
+		if ( count( $result ) )
+		{
+			echo "We found info on {$row[0]}\r\n";
 
-			# get the flag
-			$flag = $result['flag']; 
-			
-			# if flag == 5 -> system error 
-			if ( $flag == 5 )
+			foreach ( array_keys( $fields ) as $key )
 			{
-				echo "ERROR text: " . $result['errortext'];
+				$UA[] = $result[$key];
 			}
-			else
-			{
-				
-				# start with the original data
-				$UA = $row;
-
-				# add the results
-				foreach ( array_keys( $fields ) as $key )
-				{
-					$UA[] = $result[$key];
-				}
-				
-				# push it to the output
-				array_push( $output, $UA );
-
-			} 
-
 		}
-		catch ( XML_RPC2_FaultException $e )
+		
+		# No result
+		else
 		{
-		    // The XMLRPC server returns a XMLRPC error
-			die( 'Exception #' . $e->getFaultCode() . ' : ' . $e->getFaultString() );
+			echo "We could not find {$row[0]}\r\n";
 		}
-		catch ( Exception $e )
-		{
-		    // Other errors (HTTP or networking problems...)
-		    die( 'Exception : ' . $e->getMessage() );
-		}
+
+		# push it to the output
+		array_push( $output, $UA );
+
 	}
 	
 	if ( count( $output ) )
